@@ -10,3 +10,5 @@ Saves your cursor postion and restores with Command+Shift+R.
 * Command+Shift+S to start/stop  
 * Customizable hotkeys
 
+## Download
+You can download it (here)[https://github.com/galaxysj/cursor-restorer/releases/].
