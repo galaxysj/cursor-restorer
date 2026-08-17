@@ -11,13 +11,20 @@ final class CursorTrackingStore: ObservableObject {
     @Published private(set) var savedPosition: CGPoint?
     @Published private(set) var idleDuration: TimeInterval = 0
     @Published private(set) var accessibilityTrusted = false
+    @Published private(set) var inputMonitoringTrusted = false
     @Published private(set) var statusMessage = "Ready to track your cursor."
+    @Published private(set) var restoreShortcut: CursorShortcut
+    @Published private(set) var toggleShortcut: CursorShortcut
 
+    private static let restoreShortcutDefaultsKey = "restoreShortcut"
+    private static let toggleShortcutDefaultsKey = "toggleShortcut"
     private var trackingTimer: Timer?
-    private var shortcutMonitor: GlobalShortcutMonitor?
+    private var restoreShortcutMonitor: GlobalShortcutMonitor?
+    private var toggleShortcutMonitor: GlobalShortcutMonitor?
     private var lastPosition: CGPoint?
     private var lastMovementAt = Date()
     private var savedForCurrentStillness = false
+    private var appActivationObserver: NSObjectProtocol?
 
     var idleStatusText: String {
         guard isTracking else {
@@ -33,15 +40,50 @@ final class CursorTrackingStore: ObservableObject {
 
     init() {
         accessibilityTrusted = AccessibilityService.isTrusted
-        shortcutMonitor = GlobalShortcutMonitor { [weak self] in
+        inputMonitoringTrusted = AccessibilityService.isInputMonitoringTrusted
+        restoreShortcut = CursorShortcut.load(
+            from: Self.restoreShortcutDefaultsKey,
+            fallback: .defaultRestore
+        )
+        toggleShortcut = CursorShortcut.load(
+            from: Self.toggleShortcutDefaultsKey,
+            fallback: .defaultToggle
+        )
+
+        restoreShortcutMonitor = GlobalShortcutMonitor(
+            shortcut: restoreShortcut,
+            hotKeyID: 1
+        ) { [weak self] in
             Task { @MainActor in
                 self?.restoreSavedPosition()
+            }
+        }
+
+        toggleShortcutMonitor = GlobalShortcutMonitor(
+            shortcut: toggleShortcut,
+            hotKeyID: 2
+        ) { [weak self] in
+            Task { @MainActor in
+                self?.toggleTracking()
+            }
+        }
+
+        appActivationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshAccessibilityStatus()
             }
         }
     }
 
     deinit {
         trackingTimer?.invalidate()
+        if let appActivationObserver {
+            NotificationCenter.default.removeObserver(appActivationObserver)
+        }
     }
 
     func toggleTracking() {
@@ -50,6 +92,50 @@ final class CursorTrackingStore: ObservableObject {
         } else {
             startTracking()
         }
+    }
+
+    func updateRestoreShortcut(_ shortcut: CursorShortcut) {
+        guard shortcut != toggleShortcut else {
+            statusMessage = "Restore and start/stop shortcuts must be different."
+            return
+        }
+
+        guard let monitor = restoreShortcutMonitor,
+              monitor.update(to: shortcut) else {
+            statusMessage = "That restore shortcut is unavailable."
+            return
+        }
+
+        restoreShortcut = shortcut
+        shortcut.save(to: Self.restoreShortcutDefaultsKey)
+        statusMessage = "Restore shortcut set to \(shortcut.displayString)."
+    }
+
+    func updateToggleShortcut(_ shortcut: CursorShortcut) {
+        guard shortcut != restoreShortcut else {
+            statusMessage = "Restore and start/stop shortcuts must be different."
+            return
+        }
+
+        guard let monitor = toggleShortcutMonitor,
+              monitor.update(to: shortcut) else {
+            statusMessage = "That start/stop shortcut is unavailable."
+            return
+        }
+
+        toggleShortcut = shortcut
+        shortcut.save(to: Self.toggleShortcutDefaultsKey)
+        statusMessage = "Start/stop shortcut set to \(shortcut.displayString)."
+    }
+
+    func resetShortcuts() {
+        if restoreShortcut != .defaultRestore {
+            updateRestoreShortcut(.defaultRestore)
+        }
+        if toggleShortcut != .defaultToggle {
+            updateToggleShortcut(.defaultToggle)
+        }
+        statusMessage = "Keyboard shortcuts reset to defaults."
     }
 
     func startTracking() {
@@ -125,6 +211,12 @@ final class CursorTrackingStore: ObservableObject {
     func refreshAccessibilityStatus() {
         let wasTrusted = accessibilityTrusted
         accessibilityTrusted = AccessibilityService.isTrusted
+        inputMonitoringTrusted = AccessibilityService.isInputMonitoringTrusted
+
+        if accessibilityTrusted {
+            restoreShortcutMonitor?.ensureEventTap()
+            toggleShortcutMonitor?.ensureEventTap()
+        }
 
         if !wasTrusted && accessibilityTrusted {
             statusMessage = "Accessibility access granted."
@@ -135,6 +227,12 @@ final class CursorTrackingStore: ObservableObject {
         AccessibilityService.requestAccess()
         AccessibilityService.openSystemSettings()
         statusMessage = "Enable Cursor Restorer in Accessibility, then return here."
+    }
+
+    func openInputMonitoringSettings() {
+        AccessibilityService.requestInputMonitoringAccess()
+        AccessibilityService.openInputMonitoringSettings()
+        statusMessage = "Enable Cursor Restorer in Input Monitoring, then return here."
     }
 
     static func positionText(_ position: CGPoint) -> String {

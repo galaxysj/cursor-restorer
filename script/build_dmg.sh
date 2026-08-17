@@ -22,10 +22,10 @@ BACKGROUND_SOURCE="$ROOT_DIR/Assets/DMGBackground.png"
 ICONSET_DIR="$BUILD_DIR/CursorRestorer.iconset"
 ICON_FILE="$APP_RESOURCES/CursorRestorer.icns"
 DMG_STAGE="$BUILD_DIR/CursorRestorer-dmg"
-DMG_MOUNT="$BUILD_DIR/CursorRestorer-mount"
 RW_DMG="$BUILD_DIR/CursorRestorer-rw.dmg"
 DMG_PATH="$DIST_DIR/CursorRestorer-$MARKETING_VERSION.dmg"
 VOLUME_NAME="$DISPLAY_NAME $MARKETING_VERSION"
+DMG_MOUNT="/Volumes/$VOLUME_NAME"
 
 SIGNING_IDENTITY="${SIGNING_IDENTITY:-}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-}"
@@ -44,8 +44,9 @@ fi
 swift build --configuration release
 BUILD_BINARY="$(swift build --configuration release --show-bin-path)/$APP_NAME"
 
-rm -rf "$APP_BUNDLE" "$DMG_STAGE" "$DMG_MOUNT" "$ICONSET_DIR" "$RW_DMG" "$DMG_PATH"
-mkdir -p "$APP_MACOS" "$APP_RESOURCES" "$DMG_STAGE" "$DMG_MOUNT" "$ICONSET_DIR"
+hdiutil detach "$DMG_MOUNT" -quiet >/dev/null 2>&1 || true
+rm -rf "$APP_BUNDLE" "$DMG_STAGE" "$ICONSET_DIR" "$RW_DMG" "$DMG_PATH"
+mkdir -p "$APP_MACOS" "$APP_RESOURCES" "$DMG_STAGE" "$ICONSET_DIR"
 cp "$BUILD_BINARY" "$APP_BINARY"
 chmod +x "$APP_BINARY"
 cp "$ICON_SOURCE" "$APP_RESOURCES/CursorRestorer.png"
@@ -116,7 +117,7 @@ hdiutil create \
   -format UDRW \
   "$RW_DMG" >/dev/null
 
-hdiutil attach "$RW_DMG" -nobrowse -readwrite -mountpoint "$DMG_MOUNT" >/dev/null
+hdiutil attach "$RW_DMG" -nobrowse -readwrite >/dev/null
 
 if ! osascript <<APPLESCRIPT
 tell application "Finder"
@@ -132,14 +133,16 @@ tell application "Finder"
     set arrangement of viewOptions to not arranged
     set icon size of viewOptions to 128
     set text size of viewOptions to 13
-    set background picture of viewOptions to file ".background:background.png"
+    set backgroundFile to (POSIX file "/Volumes/$VOLUME_NAME/.background/background.png" as alias)
+    set background picture of viewOptions to backgroundFile
     set position of item "$DISPLAY_NAME.app" of containerWindow to {220, 310}
     set position of item "Applications" of containerWindow to {680, 310}
     close containerWindow
-    open
-    update without registering applications
     delay 2
-    close containerWindow
+    open
+    delay 1
+    set finalWindow to container window
+    close finalWindow
   end tell
 end tell
 APPLESCRIPT
@@ -149,7 +152,7 @@ fi
 
 hdiutil detach "$DMG_MOUNT" -quiet >/dev/null
 hdiutil convert "$RW_DMG" -format UDZO -imagekey zlib-level=9 -o "$DMG_PATH" >/dev/null
-rm -rf "$DMG_MOUNT" "$RW_DMG"
+rm -rf "$RW_DMG"
 hdiutil verify "$DMG_PATH" >/dev/null
 
 if [[ -n "$NOTARY_PROFILE" ]]; then

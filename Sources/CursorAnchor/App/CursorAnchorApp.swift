@@ -31,7 +31,6 @@ struct CursorRestorerApp: App {
                 Button(tracker.isTracking ? "Stop Tracking" : "Start Tracking") {
                     tracker.toggleTracking()
                 }
-                .keyboardShortcut("s", modifiers: [.command, .shift])
 
                 Button("Restore Saved Position") {
                     tracker.restoreSavedPosition()
@@ -47,7 +46,7 @@ struct CursorRestorerApp: App {
         }
 
         Settings {
-            SettingsView()
+            SettingsView(tracker: tracker)
         }
     }
 }

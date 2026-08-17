@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @ObservedObject var tracker: CursorTrackingStore
     @AppStorage("appearanceMode") private var appearanceMode = AppearanceMode.system.rawValue
 
     var body: some View {
@@ -18,19 +19,34 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Keyboard") {
-                LabeledContent("Restore shortcut") {
-                    Text("⌘⇧R")
-                        .font(.system(.body, design: .monospaced).weight(.medium))
+            Section("Keyboard shortcuts") {
+                LabeledContent("Restore") {
+                    ShortcutRecorder(shortcut: tracker.restoreShortcut) {
+                        tracker.updateRestoreShortcut($0)
+                    }
+                    .frame(width: 158, height: 30)
+                    .id("restore-shortcut-recorder")
                 }
 
-                Text("The restore shortcut works while Cursor Restorer is in the background.")
+                LabeledContent("Start / stop") {
+                    ShortcutRecorder(shortcut: tracker.toggleShortcut) {
+                        tracker.updateToggleShortcut($0)
+                    }
+                    .frame(width: 158, height: 30)
+                    .id("toggle-shortcut-recorder")
+                }
+
+                Text("Click a shortcut, then press a new key combination. Both shortcuts work in the background.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
+
+                Button("Reset shortcuts") {
+                    tracker.resetShortcuts()
+                }
             }
         }
         .formStyle(.grouped)
         .scenePadding()
-        .frame(width: 460, height: 260)
+        .frame(width: 500, height: 360)
     }
 }

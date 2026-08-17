@@ -19,6 +19,9 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     trackingCard
                     accessibilityCard
+                    if tracker.accessibilityTrusted && !tracker.inputMonitoringTrusted {
+                        inputMonitoringCard
+                    }
                     shortcutCard
                 }
                 .padding(.top, 20)
@@ -37,7 +40,7 @@ struct ContentView: View {
                     Label("Restore", systemImage: "arrow.uturn.backward.circle")
                 }
                 .disabled(!tracker.hasSavedPosition)
-                .help("Restore the saved cursor position (⌘⇧R)")
+                .help("Restore the saved cursor position (\(tracker.restoreShortcut.displayString))")
 
                 Button {
                     tracker.toggleTracking()
@@ -197,17 +200,47 @@ struct ContentView: View {
                 .foregroundStyle(.tint)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("Restore shortcut")
+                Text("Keyboard shortcuts")
                     .font(.headline)
 
-                Text("Works while Cursor Restorer is in the background.")
+                Text("Both shortcuts work while Cursor Restorer is in the background.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
 
             Spacer()
 
-            ShortcutKeys()
+            ShortcutKeys(
+                restoreShortcut: tracker.restoreShortcut,
+                toggleShortcut: tracker.toggleShortcut
+            )
+        }
+        .cardStyle()
+    }
+
+    private var inputMonitoringCard: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "keyboard.badge.ellipsis")
+                .font(.title3)
+                .foregroundStyle(.orange)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Input Monitoring access needed")
+                    .font(.headline)
+
+                Text("This lets global shortcuts such as ⌘⇧R work when another app already uses the same shortcut.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 12)
+
+            Button("Open Input Monitoring") {
+                tracker.openInputMonitoringSettings()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
         .cardStyle()
     }
@@ -234,27 +267,34 @@ private struct StatusBadge: View {
 }
 
 private struct ShortcutKeys: View {
+    let restoreShortcut: CursorShortcut
+    let toggleShortcut: CursorShortcut
+
     var body: some View {
-        HStack(spacing: 4) {
-            KeyCap("⌘")
-            KeyCap("⇧")
-            KeyCap("R")
+        VStack(alignment: .trailing, spacing: 6) {
+            HStack(spacing: 4) {
+                Text("Restore")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                shortcutCaps(restoreShortcut)
+            }
+
+            HStack(spacing: 4) {
+                Text("Start / stop")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                shortcutCaps(toggleShortcut)
+            }
         }
     }
-}
 
-private struct KeyCap: View {
-    let title: String
-
-    init(_ title: String) {
-        self.title = title
-    }
-
-    var body: some View {
-        Text(title)
+    private func shortcutCaps(_ shortcut: CursorShortcut) -> some View {
+        Text(shortcut.displayString)
             .font(.system(.caption, design: .rounded).weight(.semibold))
-            .frame(minWidth: 24, minHeight: 23)
-            .padding(.horizontal, 3)
+            .frame(minWidth: 52, minHeight: 23)
+            .padding(.horizontal, 5)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 5))
             .overlay(RoundedRectangle(cornerRadius: 5).stroke(.quaternary))
     }
